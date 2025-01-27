@@ -8,6 +8,7 @@
 #include <iostream>
 #include <sstream>
 #include <bitset>
+#include <fstream>
 using namespace std; // Include the standard namespace
 
 class Record {
@@ -48,6 +49,13 @@ public:
         oss.write(name.c_str(), name.size()); // writes the name in binary form
         oss.write(reinterpret_cast<const char*>(&bio_len), sizeof(bio_len)); // // Writes the size of the Bio in binary format. 
         oss.write(bio.c_str(), bio.size()); // writes bio in binary form
+
+        // Add a delimiter after each record for easier parsing
+        char delimiter = '\0'; // Null character as the delimiter
+        oss.write(&delimiter, sizeof(delimiter)); // Write the delimiter
+
+        // Return the serialized string
+        return oss.str();
     }
 };
 
@@ -65,10 +73,13 @@ public:
         if (cur_size + record_size + slot_size > 4096) { //Check if page size limit exceeded, considering slot directory size
             return false; // Cannot insert the record into this page
         } else {
+            int offset = cur_size; // The starting position (offset) for the new record
             records.push_back(r); // Record stored in current page
             cur_size += r.get_size(); // Updating page size
 
             // TO_DO: update slot directory information
+            
+            slot_directory.emplace_back(offset, record_size); // Add a new entry to the slot directory
 
             return true;
         }
@@ -93,8 +104,13 @@ public:
 
         // TO_DO: Put a delimiter here to indicate slot directory starts from here 
 
-        for (const auto& slots : slot_directory) { // TO_DO: Write the slot-directory information into page_data. You'll use slot-directory to retrieve record(s).
+        page_data[offset++] = '\0'; // Add a null character as the delimiter
 
+        for (const auto& slots : slot_directory) { // TO_DO: Write the slot-directory information into page_data. You'll use slot-directory to retrieve record(s).
+            memcpy(page_data + offset, &slots.first, sizeof(int)); // Write offset
+            offset += sizeof(int);
+            memcpy(page_data + offset, &slots.second, sizeof(int)); // Write size
+            offset += sizeof(int);
 
         }
         
@@ -113,7 +129,51 @@ public:
             
             // TO_DO: You may process page_data (4 KB page) and put the information to the records and slot_directory (main memory).
             // TO_DO: You may modify this function to process the search for employee ID in the page you just loaded to main memory.
+            int offset = 0;
+            records.clear(); // Clear existing records
+            while (offset < 4096 && page_data[offset] != '\0') { // Stop at the delimiter
+                // Deserialize the record manually using the `Record` constructor
+                int id, manager_id, name_len, bio_len;
 
+                memcpy(&id, page_data + offset, sizeof(int)); // Read ID
+                offset += sizeof(int);
+
+                memcpy(&manager_id, page_data + offset, sizeof(int)); // Read Manager ID
+                offset += sizeof(int);
+
+                memcpy(&name_len, page_data + offset, sizeof(int)); // Read Name length
+                offset += sizeof(int);
+
+                string name(page_data + offset, name_len); // Read Name
+                offset += name_len;
+
+                memcpy(&bio_len, page_data + offset, sizeof(int)); // Read Bio length
+                offset += sizeof(int);
+
+                string bio(page_data + offset, bio_len); // Read Bio
+                offset += bio_len;
+
+                // Construct Record object and add it to records
+                vector<string> fields = {to_string(id), name, bio, to_string(manager_id)};
+                Record record(fields);
+                records.push_back(record);
+            }
+            // Skip the delimiter
+            offset++;
+
+            // TO_DO: Populate the slot directory
+            slot_directory.clear(); // Clear existing slot directory
+            while (offset + sizeof(int) * 2 <= 4096) { // Ensure there's enough space for offset and size
+                int record_offset, record_size;
+
+                memcpy(&record_offset, page_data + offset, sizeof(int)); // Read offset
+                offset += sizeof(int);
+
+                memcpy(&record_size, page_data + offset, sizeof(int)); // Read size
+                offset += sizeof(int);
+
+                slot_directory.emplace_back(record_offset, record_size); // Add entry to the slot directory
+            }
             return true;
         }
 
