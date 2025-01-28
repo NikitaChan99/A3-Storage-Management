@@ -106,7 +106,13 @@ public:
 
         page_data[offset++] = '\0'; // Add a null character as the delimiter
 
-        for (const auto& slots : slot_directory) { // TO_DO: Write the slot-directory information into page_data. You'll use slot-directory to retrieve record(s).
+        for (const auto& slots : slot_directory) { 
+            // TO_DO: Write the slot-directory information into page_data. You'll use slot-directory to retrieve record(s).
+            if (slots.first < 0 || slots.first >= 4096 || slots.second <= 0 || slots.second > 4096) {
+                cerr << "Error: Invalid slot being written! Offset: " << slots.first << ", Size: " << slots.second << endl;
+                continue; // skip the error slot to prevent invalid data from being written 
+            }
+            cout << "Writing slot - Offset: " << slots.first << ", Size: " << slots.second << endl; // Debug
             memcpy(page_data + offset, &slots.first, sizeof(int)); // Write offset
             offset += sizeof(int);
             memcpy(page_data + offset, &slots.second, sizeof(int)); // Write size
@@ -120,6 +126,7 @@ public:
 
     // Read a page from a binary input stream, i.e., EmployeeRelation.dat file to populate a page object
     bool read_from_data_file(istream& in) {
+        cout << "read_from_data_file() called!" << endl;
         char page_data[4096] = {0}; // Character array used to read 4 KB from the data file to your main memory. 
         in.read(page_data, 4096); // Read a page of 4 KB from the data file 
 
@@ -131,7 +138,10 @@ public:
             // TO_DO: You may modify this function to process the search for employee ID in the page you just loaded to main memory.
             int offset = 0;
             records.clear(); // Clear existing records
-            while (offset < 4096 && page_data[offset] != '\0') { // Stop at the delimiter
+            // Debugging: Print the initial offset
+            cout << "Initial offset: " << offset << endl;
+
+            while (offset < 4096 - sizeof(int) * 2) {  // Stop at the delimiter
                 // Deserialize the record manually using the `Record` constructor
                 int id, manager_id, name_len, bio_len;
 
@@ -141,6 +151,10 @@ public:
                 memcpy(&manager_id, page_data + offset, sizeof(int)); // Read Manager ID
                 offset += sizeof(int);
 
+                // if (offset + name_len >= 4096) {
+                //     cerr << "Error: Name field out of bounds!" << endl;
+                //     return false;
+                // }
                 memcpy(&name_len, page_data + offset, sizeof(int)); // Read Name length
                 offset += sizeof(int);
 
@@ -157,9 +171,15 @@ public:
                 vector<string> fields = {to_string(id), name, bio, to_string(manager_id)};
                 Record record(fields);
                 records.push_back(record);
+
+                // Debugging: Print the offset after reading each record
+                cout << "Record read, current offset: " << offset << endl;
             }
             // Skip the delimiter
             offset++;
+
+            // Debugging: Print the offset after skipping the delimiter
+            cout << "Offset after skipping delimiter: " << offset << endl;
 
             // TO_DO: Populate the slot directory
             slot_directory.clear(); // Clear existing slot directory
@@ -171,9 +191,18 @@ public:
 
                 memcpy(&record_size, page_data + offset, sizeof(int)); // Read size
                 offset += sizeof(int);
-
+                cout << "Parsed Slot - Offset: " << record_offset << ", Size: " << record_size << endl;
+                if (record_offset < 0 || record_offset >= 4096 || record_size <= 0 || record_size > 4096) {
+                    // cout << "Invalid slot detected, breaking loop!" << endl;
+                    cerr << "Invalid slot detected in read! Offset: " << record_offset << ", Size: " << record_size << ". Breaking loop!" << endl;
+                    break;
+                }
                 slot_directory.emplace_back(record_offset, record_size); // Add entry to the slot directory
+                // Debugging: Print the offset after reading each slot
+                cout << "Slot read, current offset: " << offset << endl;
             }
+            // Debugging: Print the final offset
+            cout << "Final offset: " << offset << endl;
             return true;
         }
 
@@ -257,7 +286,9 @@ public:
         // TO_DO: Read pages from your data file (using read_from_data_file) and search for the employee ID in those pages. Be mindful of the page limit in main memory.        
         int page_number = 0;
         while(buffer[page_number].read_from_data_file(data_file)){
+            cout << "Checking Page: " << page_number << endl;
            for(Record& r : buffer[page_number].records) {
+            cout << "Checking Employee ID: " << r.id << endl;
                 if(r.id ==searchId ) {
                     cout<<"We have found the employee with id "<< r.id<< "and name"<<r.name<<endl;;
                     return;
