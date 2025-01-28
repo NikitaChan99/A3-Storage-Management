@@ -25,7 +25,7 @@ int main(int argc, char* const argv[]) {
     // we want to read from the Employee.csv and write into the new data_file
     manager.createFromFile("Employee.csv");
 
-    // TODO: You'll receive employee IDs as arguments, process them to retrieve the record, or display a message if not found. 
+    manager.findAndPrintEmployee(123);
 
     return 0;
 }

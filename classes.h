@@ -165,7 +165,7 @@ public:
             slot_directory.clear(); // Clear existing slot directory
             while (offset + sizeof(int) * 2 <= 4096) { // Ensure there's enough space for offset and size
                 int record_offset, record_size;
-
+                cout<<"Infinite for loop"<<endl;
                 memcpy(&record_offset, page_data + offset, sizeof(int)); // Read offset
                 offset += sizeof(int);
 
@@ -257,9 +257,18 @@ public:
         // TO_DO: Read pages from your data file (using read_from_data_file) and search for the employee ID in those pages. Be mindful of the page limit in main memory.        
         int page_number = 0;
         while(buffer[page_number].read_from_data_file(data_file)){
-        
+           for(Record& r : buffer[page_number].records) {
+                if(r.id ==searchId ) {
+                    cout<<"We have found the employee with id "<< r.id<< "and name"<<r.name<<endl;;
+                    return;
+                }
+           }
+
+            page_number++;
         }
-        // TO_DO: Print "Record not found" if no records match.
+
+        data_file.clear();
+        cout<<"We can't find the employee with that id "<<endl;
 
     }
 };
