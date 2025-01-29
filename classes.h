@@ -73,12 +73,11 @@ public:
         if (cur_size + record_size + slot_size > 4096) { //Check if page size limit exceeded, considering slot directory size
             return false; // Cannot insert the record into this page
         } else {
-            int offset = cur_size; // The starting position (offset) for the new record
             records.push_back(r); // Record stored in current page
             cur_size += r.get_size(); // Updating page size
 
             // TO_DO: update slot directory information
-            
+            int offset = cur_size - record_size;
             slot_directory.emplace_back(offset, record_size); // Add a new entry to the slot directory
 
             return true;
@@ -104,7 +103,7 @@ public:
 
         // TO_DO: Put a delimiter here to indicate slot directory starts from here 
 
-        page_data[offset++] = '\0'; // Add a null character as the delimiter
+        page_data[offset++] = '#'; // Add a null character as the delimiter
 
         for (const auto& slots : slot_directory) { 
             // TO_DO: Write the slot-directory information into page_data. You'll use slot-directory to retrieve record(s).
@@ -137,14 +136,15 @@ public:
             
             // TO_DO: You may process page_data (4 KB page) and put the information to the records and slot_directory (main memory).
             // TO_DO: You may modify this function to process the search for employee ID in the page you just loaded to main memory.
+            records.clear();
+            slot_directory.clear();
             int offset = 0;
-            records.clear(); // Clear existing records
             // Debugging: Print the initial offset
             cout << "Initial offset: " << offset << endl;
 
             //change
             // while (offset < 4096 - sizeof(int) * 2) {  // Stop at the delimiter
-            while (offset < 4096 && page_data[offset] != '\0') {
+            while (offset < 4096 && page_data[offset] != '#') {
                 // Deserialize the record manually using the `Record` constructor
                 int id, manager_id, name_len, bio_len;
 
@@ -154,10 +154,6 @@ public:
                 memcpy(&manager_id, page_data + offset, sizeof(int)); // Read Manager ID
                 offset += sizeof(int);
 
-                // if (offset + name_len >= 4096) {
-                //     cerr << "Error: Name field out of bounds!" << endl;
-                //     return false;
-                // }
                 memcpy(&name_len, page_data + offset, sizeof(int)); // Read Name length
                 offset += sizeof(int);
 
@@ -172,20 +168,22 @@ public:
 
                 // Construct Record object and add it to records
                 vector<string> fields = {to_string(id), name, bio, to_string(manager_id)};
-                Record record(fields);
-                records.push_back(record);
+                records.emplace_back(fields);
 
                 // Debugging: Print the offset after reading each record
                 cout << "Record read, current offset: " << offset << endl;
+                offset++;
             }
             // Skip the delimiter
-            offset++;
+            if (page_data[offset] == '#') {
+                offset++;
+            }
+
 
             // Debugging: Print the offset after skipping the delimiter
             cout << "Offset after skipping delimiter: " << offset << endl;
 
             // TO_DO: Populate the slot directory
-            slot_directory.clear(); // Clear existing slot directory
             while (offset + sizeof(int) * 2 <= 4096) { // Ensure there's enough space for offset and size
                 int record_offset, record_size;
                 cout<<"Infinite for loop"<<endl;
@@ -284,94 +282,25 @@ public:
     // Searches for an Employee ID in EmployeeRelation.dat
     void findAndPrintEmployee(int searchId) {
         
-    //     data_file.seekg(0, ios::beg);  // Rewind the data_file to the beginning for reading
+        data_file.seekg(0, ios::beg);  // Rewind the data_file to the beginning for reading
 
-    //     // TO_DO: Read pages from your data file (using read_from_data_file) and search for the employee ID in those pages. Be mindful of the page limit in main memory.        
-    //     int page_number = 0;
-    //     while(buffer[page_number].read_from_data_file(data_file)){
-    //         cout << "Checking Page: " << page_number << endl;
-    //        for(Record& r : buffer[page_number].records) {
-    //         cout << "Checking Employee ID: " << r.id << endl;
-    //             if(r.id ==searchId ) {
-    //                 cout<<"We have found the employee with id "<< r.id<< "and name"<<r.name<<endl;;
-    //                 return;
-    //             }
-    //        }
-
-    //         page_number++;
-    //     }
-
-    //     data_file.clear();
-    //     cout<<"We can't find the employee with that id "<<endl;
-
-    // }
-        data_file.seekg(0, ios::beg); // 将文件指针移动到文件开头
-        bool found = false; // 标记是否找到记录
-
-        // 逐页读取文件内容
-    while (true) {
-        page current_page;
-
-        // 尝试读取一页，如果失败则跳出循环
-        if (!current_page.read_from_data_file(data_file)) {
-            break;
-        }
-
-        // 检查当前页是否已经加载到内存中（避免重复加载）
-        auto it = std::find_if(buffer.begin(), buffer.end(), [&](const page& p) {
-            if (p.records.size() != current_page.records.size()) {
-                return false; // 如果大小不一致，直接返回 false
-            }
-
-            for (size_t i = 0; i < p.records.size(); ++i) {
-                const Record& r1 = p.records[i];
-                const Record& r2 = current_page.records[i];
-
-                // 手动比较 Record 的字段
-                if (r1.id != r2.id || r1.manager_id != r2.manager_id ||
-                    r1.bio != r2.bio || r1.name != r2.name) {
-                    return false; // 如果任意字段不匹配，返回 false
+        // TO_DO: Read pages from your data file (using read_from_data_file) and search for the employee ID in those pages. Be mindful of the page limit in main memory.        
+        int page_number = 0;
+        while(buffer[page_number].read_from_data_file(data_file)){
+            cout << "Checking Page: " << page_number << endl;
+           for(Record& r : buffer[page_number].records) {
+            cout << "Checking Employee ID: " << r.id << endl;
+                if(r.id ==searchId ) {
+                    cout<<"We have found the employee with id "<< r.id<< "and name"<<r.name<<endl;;
+                    return;
                 }
-            }
+           }
 
-            return true; // 如果所有字段都相等，返回 true
-
-        });
-
-        // 如果当前页不在内存中，加载到内存中（最多保留3页）
-        if (it == buffer.end()) {
-            if (buffer.size() >= 3) {
-                buffer.erase(buffer.begin()); // 移除最旧的页
-            }
-            buffer.push_back(current_page);
+            page_number++;
         }
+        
+        data_file.clear();
+        cout<<"We can't find the employee with that id "<<endl;
 
-        // 遍历当前页的记录，寻找目标 ID
-        for (const auto& record : current_page.records) {
-            if (record.id == searchId) {
-                // 找到记录后输出相关信息
-                cout << "✅ Employee Found: " << endl;
-                for (const auto& record : current_page.records) {
-    Record temp = record; // 创建非 const 的副本
-    temp.print();
-}
-                found = true;
-                break; // 结束记录查找
-            }
-        }
-
-        // 如果找到记录，直接退出页面读取
-        if (found) {
-            break;
-        }
-    }
-
-    // 如果未找到目标记录，输出提示信息
-    if (!found) {
-        cout << "❌ Record not found for ID: " << searchId << endl;
-    }
-
-    // 清理文件流状态，准备下次操作
-    data_file.clear();
     }
 };
